@@ -1,0 +1,84 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: investora-postgres
+    environment:
+      POSTGRES_DB: investora_db
+      POSTGRES_USER: investora_user
+      POSTGRES_PASSWORD: investora_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    networks:
+      - investora-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U investora_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: investora-backend
+    environment:
+      NODE_ENV: development
+      PORT: 5000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: investora_db
+      DB_USER: investora_user
+      DB_PASSWORD: investora_password
+      JWT_SECRET: your_jwt_secret_key_change_in_production_12345
+      ADMIN_PHONE: "955748798"
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - investora-network
+    command: npm run dev
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: investora-frontend
+    environment:
+      NODE_ENV: development
+      REACT_APP_API_URL: http://localhost:5000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - investora-network
+    command: npm start
+
+  redis:
+    image: redis:7-alpine
+    container_name: investora-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - investora-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  investora-network:
+    driver: bridge
